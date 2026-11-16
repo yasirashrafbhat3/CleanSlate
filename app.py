@@ -1,705 +1,667 @@
+"""
+CleanSlate — Data Validation & Cleansing Utility
+Vintage Garage Edition.
 
-import streamlit as st
-import pandas as pd
-import csv
+Uses the existing validator.py:
+    REQUIRED_FIELDS
+    process_records(records) -> (cleaned_records, errors)
+
+CSV files are processed in memory. No database or permanent upload storage.
+"""
+
+from __future__ import annotations
+
 import io
+from typing import Any
 
-from validator import REQUIRED_FIELDS, process_records
+import pandas as pd
+import streamlit as st
+import validator
 
-# --------------------------------------------------
-# PAGE CONFIG
-# --------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# PAGE CONFIGURATION AND PROJECT CONTRACT
+# ---------------------------------------------------------------------------
 
 st.set_page_config(
-    page_title="CleanSlate | Data Quality",
-    page_icon="🧹",
+    page_title="CleanSlate | Vintage Garage",
+    page_icon="🛠️",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed",
 )
 
-# --------------------------------------------------
-# CUSTOM CSS
-# --------------------------------------------------
+REQUIRED_FIELDS = list(validator.REQUIRED_FIELDS)
 
-st.markdown("""
+
+# ---------------------------------------------------------------------------
+# VINTAGE GARAGE THEME
+# ---------------------------------------------------------------------------
+
+C = {
+    "cream": "#E9E1D0",
+    "ivory": "#F4EBDD",
+    "charcoal": "#242321",
+    "black": "#171717",
+    "green": "#294C3B",
+    "olive": "#74775A",
+    "orange": "#B7653D",
+    "brass": "#B08A52",
+    "soft": "#5B574F",
+    "faint": "#8A8478",
+}
+
+CSS = f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;1,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
-html, body, [class*="css"] {
-    font-family: 'DM Sans', sans-serif;
-}
-
-.stApp {
-    background: #0B1120;
-    color: #E8EEF6;
-}
-
-.block-container {
-    max-width: 1450px;
-    padding-top: 2rem;
-    padding-bottom: 3rem;
-}
-
-[data-testid="stSidebar"] {
-    background: #101A2B;
-    border-right: 1px solid #26364B;
-}
-
-.hero {
-    background: linear-gradient(120deg, #142B40, #123C3A);
-    border: 1px solid #28534E;
-    border-radius: 20px;
-    padding: 30px;
-    margin-bottom: 28px;
-}
-
-.hero h1 {
-    color: #FFFFFF;
-    font-size: 38px;
-    font-weight: 800;
-    letter-spacing: -1px;
-    margin: 0;
-}
-
-.hero p {
-    color: #B8D0CE;
-    font-size: 15px;
-}
-
-.eyebrow {
-    color: #65D6A5;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 2px;
-    margin-bottom: 10px;
-}
-
-.metric-card {
-    background: linear-gradient(145deg, #172438, #111C2D);
-    border: 1px solid #293A50;
-    border-radius: 15px;
-    padding: 19px;
-    min-height: 125px;
-}
-
-.metric-label {
-    color: #9EADC2;
-    font-size: 12px;
-    font-weight: 600;
-}
-
-.metric-value {
-    color: #F4F7FB;
-    font-size: 30px;
-    font-weight: 800;
-    margin-top: 9px;
-}
-
-.metric-note {
-    color: #8293A9;
-    font-size: 11px;
-    margin-top: 5px;
-}
-
-.green { color: #65D6A5; }
-.red { color: #FF8791; }
-.orange { color: #FFC36A; }
-
-.section-title {
-    color: #F0F4F8;
-    font-size: 22px;
-    font-weight: 700;
-    margin-bottom: 5px;
-}
-
-div.stButton > button {
-    background: #168B68;
-    color: white;
-    border: 1px solid #168B68;
-    border-radius: 10px;
-    min-height: 44px;
-    font-weight: 700;
-}
-
-div.stButton > button:hover {
-    background: #20A47D;
-    border-color: #20A47D;
-    color: white;
-}
-
-div.stDownloadButton > button {
-    background: #172B40;
-    color: #E5EEF8;
-    border: 1px solid #38516A;
-    border-radius: 10px;
-    font-weight: 600;
-}
-
-[data-testid="stMetric"] {
-    background: #172438;
-    border: 1px solid #293A50;
-    border-radius: 14px;
-    padding: 15px;
-}
-
-hr {
-    border-color: #293A50;
-}
-
-#MainMenu, footer {
-    visibility: hidden;
-}
+.stApp {{
+    background: radial-gradient(circle at 12% 8%, {C['ivory']} 0%, transparent 42%),
+                radial-gradient(circle at 88% 85%, {C['ivory']} 0%, transparent 40%),
+                {C['cream']};
+    color: {C['charcoal']};
+    font-family: 'Inter', sans-serif;
+}}
+.block-container {{max-width: 1200px; padding-top: 2rem; padding-bottom: 3rem;}}
+#MainMenu, footer {{visibility: hidden;}}
+h1, h2, h3 {{color: {C['charcoal']};}}
+.cs-header {{
+    display:flex; justify-content:space-between; align-items:flex-end;
+    border-bottom:2px solid {C['charcoal']}; padding-bottom:1rem; margin-bottom:1.5rem;
+    position:relative;
+}}
+.cs-header:after {{
+    content:''; position:absolute; bottom:-6px; left:0; right:0;
+    height:1px; background:{C['brass']};
+}}
+.cs-brand {{font-family:'Oswald',sans-serif; font-size:1.8rem; font-weight:700;
+    letter-spacing:.08em; text-transform:uppercase; display:flex; align-items:center; gap:.7rem;}}
+.cs-mark {{width:25px;height:25px;background:{C['green']};border:2px solid {C['charcoal']};}}
+.cs-sub {{font-family:'Playfair Display',serif;font-style:italic;color:{C['soft']};}}
+.cs-meta {{font-family:'IBM Plex Mono',monospace;font-size:.68rem;text-align:right;
+    color:{C['faint']};letter-spacing:.1em;text-transform:uppercase;}}
+.cs-status {{color:{C['green']};border:1px solid {C['green']};padding:.2rem .5rem;display:inline-block;margin-top:.4rem;}}
+.cs-hero {{padding:1.7rem 0 2rem;border-bottom:1px dashed {C['soft']};margin-bottom:1.6rem;}}
+.cs-eyebrow {{font-family:'IBM Plex Mono',monospace;color:{C['orange']};font-size:.72rem;
+    letter-spacing:.18em;text-transform:uppercase;margin-bottom:.6rem;}}
+.cs-title {{font-family:'Oswald',sans-serif;font-size:3.3rem;line-height:1.02;
+    text-transform:uppercase;font-weight:600;margin:0;color:{C['charcoal']};}}
+.cs-title em {{font-family:'Playfair Display',serif;color:{C['green']};text-transform:none;}}
+.cs-lede {{max-width:700px;color:{C['soft']};line-height:1.65;margin-top:.8rem;}}
+.cs-steps {{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid {C['charcoal']};
+    border-bottom:1px solid {C['charcoal']};margin:1.5rem 0 2rem;}}
+.cs-step {{padding:1rem;border-right:1px solid {C['soft']};}}
+.cs-step:last-child {{border-right:0;}}
+.cs-num {{font-family:'IBM Plex Mono',monospace;color:{C['brass']};font-size:.75rem;}}
+.cs-step strong {{display:block;font-family:'Oswald',sans-serif;letter-spacing:.1em;margin:.3rem 0;text-transform:uppercase;}}
+.cs-step span {{font-size:.8rem;color:{C['soft']};}}
+.cs-card {{background:{C['ivory']};border:1px solid {C['soft']};padding:1.2rem 1.3rem;margin:.5rem 0 1rem;}}
+.cs-card-title {{font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:.12em;
+    border-bottom:1px solid {C['soft']};padding-bottom:.6rem;margin-bottom:.8rem;}}
+.cs-rule {{display:flex;align-items:center;gap:.8rem;margin:1.7rem 0 .8rem;
+    font-family:'IBM Plex Mono',monospace;font-size:.68rem;letter-spacing:.16em;
+    color:{C['faint']};text-transform:uppercase;}}
+.cs-rule:after {{content:'';height:1px;background:{C['brass']};flex:1;}}
+.cs-stats {{display:grid;grid-template-columns:repeat(5,1fr);border:1px solid {C['charcoal']};margin:1rem 0;}}
+.cs-stat {{padding:1rem;background:{C['ivory']};border-right:1px solid {C['soft']};}}
+.cs-stat:last-child {{border-right:0;}}
+.cs-stat small {{display:block;font-family:'IBM Plex Mono',monospace;font-size:.62rem;
+    letter-spacing:.12em;color:{C['faint']};text-transform:uppercase;}}
+.cs-stat b {{display:block;font-family:'Oswald',sans-serif;font-size:2rem;margin-top:.3rem;}}
+.cs-stat.issue b {{color:{C['orange']};}}
+.cs-stat.good b {{color:{C['green']};}}
+.stButton>button,.stDownloadButton>button {{
+    background:{C['charcoal']}!important;color:{C['ivory']}!important;border:1px solid {C['charcoal']}!important;
+    border-radius:0!important;font-family:'Oswald',sans-serif!important;letter-spacing:.12em!important;
+    text-transform:uppercase!important;padding:.55rem 1rem!important;
+}}
+.stButton>button:hover,.stDownloadButton>button:hover {{
+    background:{C['green']}!important;border-color:{C['green']}!important;
+}}
+[data-testid="stFileUploaderDropzone"] {{background:{C['ivory']};border:1px dashed {C['charcoal']};border-radius:0;}}
+.stTabs [data-baseweb="tab-list"] {{gap:0;border-bottom:1px solid {C['charcoal']};}}
+.stTabs [data-baseweb="tab"] {{font-family:'IBM Plex Mono',monospace;text-transform:uppercase;
+    letter-spacing:.08em;border-radius:0;}}
+.stTabs [aria-selected="true"] {{background:{C['ivory']}!important;color:{C['charcoal']}!important;}}
+[data-testid="stDataFrame"] {{border:1px solid {C['charcoal']};border-radius:0;}}
+.cs-footer {{border-top:1px solid {C['soft']};margin-top:2.5rem;padding-top:1rem;
+    display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap;
+    font-family:'IBM Plex Mono',monospace;font-size:.65rem;letter-spacing:.1em;color:{C['faint']};}}
+@media(max-width:800px) {{
+    .cs-steps {{grid-template-columns:repeat(2,1fr);}}
+    .cs-stats {{grid-template-columns:repeat(2,1fr);}}
+    .cs-title {{font-size:2.4rem;}}
+}}
 </style>
-""", unsafe_allow_html=True)
+"""
+
+st.markdown(CSS, unsafe_allow_html=True)
 
 
-# --------------------------------------------------
-# HELPER FUNCTIONS
-# --------------------------------------------------
+# ---------------------------------------------------------------------------
+# HELPERS
+# ---------------------------------------------------------------------------
 
-def make_csv(dataframe):
+def section_rule(label: str) -> None:
+    st.markdown(
+        f'<div class="cs-rule">{label}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def read_csv(uploaded_file: Any) -> pd.DataFrame:
+    raw = uploaded_file.getvalue()
+
+    for encoding in ("utf-8", "utf-8-sig", "latin-1"):
+        try:
+            return pd.read_csv(
+                io.BytesIO(raw),
+                encoding=encoding,
+                dtype=str,
+                keep_default_na=False,
+                skip_blank_lines=True,
+            )
+
+        except UnicodeDecodeError:
+            continue
+
+        except pd.errors.EmptyDataError as exc:
+            raise ValueError("The uploaded CSV is empty.") from exc
+
+        except pd.errors.ParserError as exc:
+            raise ValueError(f"Could not read this CSV: {exc}") from exc
+
+    raise ValueError("The CSV encoding could not be recognised.")
+
+
+def normalise_errors(raw_errors: Any) -> list[dict]:
+    if raw_errors is None:
+        return []
+
+    if isinstance(raw_errors, dict):
+        raw_errors = [raw_errors]
+
+    result = []
+
+    for item in raw_errors:
+        if isinstance(item, dict):
+            result.append({
+                "row": item.get(
+                    "row",
+                    item.get("row_number", item.get("row_index"))
+                ),
+                "field": item.get("field", item.get("column", "")),
+                "problem": item.get(
+                    "problem",
+                    item.get("message", item.get("error", ""))
+                ),
+            })
+
+        else:
+            result.append({
+                "row": None,
+                "field": "",
+                "problem": str(item),
+            })
+
+    return result
+
+
+def make_clean_dataframe(
+    cleaned_records: Any,
+    original: pd.DataFrame
+) -> pd.DataFrame:
+
+    if isinstance(cleaned_records, pd.DataFrame):
+        cleaned = cleaned_records.copy()
+    else:
+        cleaned = pd.DataFrame(cleaned_records or [])
+
+    # Retain extra source columns when the validator returns the same row count.
+    if len(cleaned) == len(original):
+        for column in original.columns:
+            if column not in cleaned.columns:
+                cleaned[column] = original[column].values
+
+    if not cleaned.empty:
+        ordered = [
+            column for column in original.columns
+            if column in cleaned.columns
+        ]
+
+        extras = [
+            column for column in cleaned.columns
+            if column not in ordered
+        ]
+
+        cleaned = cleaned[ordered + extras]
+
+    return cleaned
+
+
+def calculate_metrics(total: int, errors: list[dict]) -> dict:
+    affected_rows = set()
+
+    for error in errors:
+        try:
+            if error["row"] is not None:
+                affected_rows.add(int(error["row"]))
+
+        except (TypeError, ValueError):
+            pass
+
+    rows_with_issues = len(affected_rows)
+    valid = max(total - rows_with_issues, 0)
+
+    duplicates = [
+        error for error in errors
+        if "duplicate" in str(error.get("problem", "")).lower()
+    ]
+
+    score = (valid / total * 100) if total else 0
+
+    return {
+        "total": total,
+        "valid": valid,
+        "with_issues": rows_with_issues,
+        "total_issues": len(errors),
+        "duplicates": len(duplicates),
+        "score": score,
+    }
+
+
+def csv_bytes(dataframe: pd.DataFrame) -> bytes:
     return dataframe.to_csv(index=False).encode("utf-8")
 
 
-def make_error_csv(errors):
-    output = io.StringIO()
-
-    writer = csv.DictWriter(
-        output,
-        fieldnames=["row", "field", "problem"]
+def show_metric(label: str, value: str, css_class: str = "") -> str:
+    return (
+        f'<div class="cs-stat {css_class}">'
+        f'<small>{label}</small><b>{value}</b></div>'
     )
 
-    writer.writeheader()
-    writer.writerows(errors)
 
-    return output.getvalue().encode("utf-8")
+# ---------------------------------------------------------------------------
+# HEADER AND HERO
+# ---------------------------------------------------------------------------
 
-
-def metric_card(label, value, note, color=""):
-    st.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-label">{label}</div>
-        <div class="metric-value {color}">{value}</div>
-        <div class="metric-note">{note}</div>
+st.markdown(
+    """
+    <div class="cs-header">
+      <div>
+        <div class="cs-brand"><span class="cs-mark"></span> CleanSlate</div>
+        <div class="cs-sub">Data Validation &amp; Cleansing Utility</div>
+      </div>
+      <div class="cs-meta">BUILD 2.0 · VINTAGE GARAGE<br>
+        <span class="cs-status">● SYSTEM READY</span>
+      </div>
     </div>
-    """, unsafe_allow_html=True)
 
-
-# --------------------------------------------------
-# SESSION STATE
-# --------------------------------------------------
-
-if "results" not in st.session_state:
-    st.session_state.results = None
-
-if "file_hash" not in st.session_state:
-    st.session_state.file_hash = None
-
-
-# --------------------------------------------------
-# SIDEBAR
-# --------------------------------------------------
-
-with st.sidebar:
-
-    st.markdown("""
-    <div style="padding:12px 0 22px 0;">
-        <div style="font-size:25px;font-weight:800;color:white;">
-            🧹 CleanSlate
-        </div>
-        <div style="font-size:10px;letter-spacing:2px;color:#65D6A5;">
-            DATA QUALITY PLATFORM
-        </div>
+    <div class="cs-hero">
+      <div class="cs-eyebrow">Workshop No. 01 · Data Quality Line</div>
+      <h1 class="cs-title">Clean data.<br><em>Clear</em> decisions.</h1>
+      <p class="cs-lede">
+      An intelligent data validation and cleansing workspace designed to
+      identify inconsistencies, standardise records, and improve data reliability,
+      one upload at a time.</p>
     </div>
-    """, unsafe_allow_html=True)
 
-    st.divider()
+    <div class="cs-steps">
+      <div class="cs-step">
+        <div class="cs-num">01</div>
+        <strong>Source</strong>
+        <span>Upload CSV data</span>
+      </div>
 
-    page = st.radio(
-        "WORKSPACE",
-        ["Dashboard", "About Project"]
-    )
+      <div class="cs-step">
+        <div class="cs-num">02</div>
+        <strong>Inspect</strong>
+        <span>Review structure</span>
+      </div>
 
-    st.divider()
+      <div class="cs-step">
+        <div class="cs-num">03</div>
+        <strong>Clean</strong>
+        <span>Validate records</span>
+      </div>
 
-    st.markdown("**SYSTEM STATUS**")
+      <div class="cs-step">
+        <div class="cs-num">04</div>
+        <strong>Export</strong>
+        <span>Download results</span>
+      </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+# ---------------------------------------------------------------------------
+# UPLOAD AND INSPECT
+# ---------------------------------------------------------------------------
+
+section_rule("Stage 01 · Source your dataset")
+
+uploaded = st.file_uploader(
+    "Choose a CSV file",
+    type=["csv"],
+    help="CSV only. Uploaded data is processed in memory.",
+)
+
+if uploaded is None:
     st.markdown(
-        '<span style="color:#65D6A5;">●</span> Ready to process',
-        unsafe_allow_html=True
+        f'<div class="cs-card">'
+        f'<div class="cs-card-title">Awaiting input</div>'
+        f'<p style="color:{C["soft"]};margin:0">'
+        f'Upload a CSV file to begin. '
+        f'The project includes sample_data.csv for a quick demonstration.'
+        f'</p></div>',
+        unsafe_allow_html=True,
     )
 
-    st.caption("CleanSlate · CP-099")
+    st.stop()
 
 
-# --------------------------------------------------
-# HEADER
-# --------------------------------------------------
+try:
+    raw_df = read_csv(uploaded)
 
-st.markdown("""
-<div class="hero">
-    <div class="eyebrow">DATA QUALITY MANAGEMENT</div>
-    <h1>Clean your data. Trust your insights.</h1>
-    <p>
-        Validate, analyse and standardise your CSV datasets
-        in one simple workspace.
-    </p>
-</div>
-""", unsafe_allow_html=True)
+except ValueError as error:
+    st.error(str(error))
+    st.stop()
 
 
-# --------------------------------------------------
-# ABOUT PAGE
-# --------------------------------------------------
+missing_columns = [
+    field for field in REQUIRED_FIELDS
+    if field not in raw_df.columns
+]
 
-if page == "About Project":
-
-    st.markdown(
-        '<div class="section-title">About CleanSlate</div>',
-        unsafe_allow_html=True
-    )
-
-    st.write("""
-    CleanSlate is a Python-based Data Validation and Cleansing Utility.
-
-    It identifies missing values, invalid information, inconsistent
-    formatting and duplicate email addresses in CSV datasets.
-
-    It also standardises safe formatting issues and generates
-    cleaned datasets and error reports.
-    """)
-
-    st.divider()
-
-    left, right = st.columns(2)
-
-    with left:
-        st.subheader("Data validation")
-        st.write("""
-        - Missing field detection
-        - Email validation
-        - Indian mobile number validation
-        - Date of birth validation
-        - Duplicate email detection
-        """)
-
-    with right:
-        st.subheader("Data cleansing")
-        st.write("""
-        - Remove unnecessary spaces
-        - Standardise names
-        - Standardise cities
-        - Convert emails to lowercase
-        - Export cleaned datasets
-        """)
-
-    st.divider()
-    st.subheader("Technology stack")
-    st.write("Python · Streamlit · Pandas · CSV · Regular Expressions")
-
-    st.info(
-        "The original uploaded file is preserved. "
-        "Invalid and duplicate records are reported, not deleted."
-    )
+if missing_columns:
+    st.error("Missing required column(s): " + ", ".join(missing_columns))
+    st.caption("Columns found: " + ", ".join(map(str, raw_df.columns)))
+    st.stop()
 
 
-# --------------------------------------------------
-# DASHBOARD
-# --------------------------------------------------
+if raw_df.empty:
+    st.warning("This CSV contains column headings but no data rows.")
+    st.stop()
 
-else:
 
-    st.markdown(
-        '<div class="section-title">Workspace Overview</div>',
-        unsafe_allow_html=True
-    )
+st.success(
+    f"Loaded **{uploaded.name}** · "
+    f"{len(raw_df):,} records · "
+    f"{len(raw_df.columns)} columns"
+)
 
-    st.caption(
-        "Upload your dataset to begin quality analysis."
-    )
 
-    uploaded_file = st.file_uploader(
-        "Drop your CSV file here or browse files",
-        type=["csv"],
-        help="Required columns: name, email, phone, date_of_birth, city"
-    )
+# ---------------------------------------------------------------------------
+# DATASET PREVIEW
+# ---------------------------------------------------------------------------
 
-    if uploaded_file is not None:
+section_rule("Stage 02 · Inspect the records")
 
-        file_bytes = uploaded_file.getvalue()
+st.markdown(
+    '<div class="cs-card">'
+    '<div class="cs-card-title">Dataset preview</div>',
+    unsafe_allow_html=True,
+)
 
-        import hashlib
-        current_hash = hashlib.sha256(file_bytes).hexdigest()
+a, b, c = st.columns(3)
 
-        if current_hash != st.session_state.file_hash:
-            st.session_state.file_hash = current_hash
-            st.session_state.results = None
+a.metric("Rows", f"{len(raw_df):,}")
+b.metric("Columns", f"{len(raw_df.columns):,}")
+c.metric("File", uploaded.name)
 
-        try:
+st.dataframe(
+    raw_df.head(25),
+    use_container_width=True,
+    hide_index=True,
+)
 
-            df = pd.read_csv(
-                io.BytesIO(file_bytes),
-                dtype=str,
-                keep_default_na=False
+st.markdown("</div>", unsafe_allow_html=True)
+
+
+# ---------------------------------------------------------------------------
+# ANALYSIS
+# ---------------------------------------------------------------------------
+
+section_rule("Stage 03 · Clean and validate")
+
+analyse = st.button(
+    "RUN DATA INSPECTION",
+    type="primary",
+    use_container_width=True,
+)
+
+
+if "analysis_cache" not in st.session_state:
+    st.session_state.analysis_cache = None
+
+
+if analyse:
+    try:
+        with st.spinner("Inspecting records in the workshop..."):
+
+            records = raw_df.to_dict(orient="records")
+
+            cleaned_records, raw_errors = validator.process_records(records)
+
+            errors = normalise_errors(raw_errors)
+
+            cleaned_df = make_clean_dataframe(
+                cleaned_records,
+                raw_df,
             )
 
-            df.columns = [str(c).strip() for c in df.columns]
-
-            if len(df.columns) != len(set(df.columns)):
-                st.error("Duplicate column names found in CSV.")
-
-            elif df.empty:
-                st.warning("The uploaded CSV has no records.")
-
-            else:
-
-                missing = [
-                    field for field in REQUIRED_FIELDS
-                    if field not in df.columns
-                ]
-
-                if missing:
+            metrics = calculate_metrics(
+                len(raw_df),
+                errors,
+            )
 
-                    st.error(
-                        "Missing required columns: "
-                        + ", ".join(missing)
-                    )
+            st.session_state.analysis_cache = {
+                "filename": uploaded.name,
+                "cleaned": cleaned_df,
+                "errors": errors,
+                "metrics": metrics,
+                "original": raw_df.copy(),
+            }
 
-                    st.caption(
-                        "Required: " + ", ".join(REQUIRED_FIELDS)
-                    )
-
-                else:
-
-                    st.success(
-                        f"File uploaded successfully: {uploaded_file.name}"
-                    )
-
-                    st.caption(
-                        f"{len(df):,} records · {len(df.columns)} columns"
-                    )
-
-                    with st.expander("Preview original dataset"):
-                        st.dataframe(
-                            df,
-                            use_container_width=True,
-                            hide_index=True
-                        )
-
-                    if st.button(
-                        "✦ Run Data Validation",
-                        type="primary",
-                        use_container_width=True
-                    ):
-
-                        with st.spinner("Analysing your dataset..."):
-
-                            records = df[REQUIRED_FIELDS].to_dict(
-                                orient="records"
-                            )
-
-                            cleaned_records, errors = process_records(
-                                records
-                            )
-
-                            cleaned_df = pd.DataFrame(
-                                cleaned_records,
-                                columns=REQUIRED_FIELDS
-                            )
-
-                            error_df = pd.DataFrame(
-                                errors,
-                                columns=["row", "field", "problem"]
-                            )
-
-                            total = len(records)
-
-                            issue_rows = {
-                                error["row"] for error in errors
-                            }
-
-                            issue_count = len(issue_rows)
-                            valid_count = total - issue_count
-
-                            duplicate_count = sum(
-                                "Duplicate email" in error["problem"]
-                                for error in errors
-                            )
-
-                            score = (
-                                round(valid_count / total * 100, 1)
-                                if total else 0
-                            )
-
-                            st.session_state.results = {
-                                "original": df,
-                                "cleaned": cleaned_df,
-                                "errors": errors,
-                                "error_df": error_df,
-                                "total": total,
-                                "valid": valid_count,
-                                "issues": issue_count,
-                                "duplicates": duplicate_count,
-                                "score": score
-                            }
-
-                    # ------------------------------------------
-                    # RESULTS
-                    # ------------------------------------------
-
-                    result = st.session_state.results
-
-                    if result is not None:
-
-                        st.divider()
-
-                        st.markdown(
-                            '<div class="section-title">Quality Overview</div>',
-                            unsafe_allow_html=True
-                        )
-
-                        st.caption(
-                            "Live statistics calculated from your dataset."
-                        )
-
-                        c1, c2, c3, c4 = st.columns(4)
-
-                        with c1:
-                            metric_card(
-                                "TOTAL RECORDS",
-                                f"{result['total']:,}",
-                                "Records analysed"
-                            )
-
-                        with c2:
-                            metric_card(
-                                "VALID RECORDS",
-                                f"{result['valid']:,}",
-                                "No detected issues",
-                                "green"
-                            )
-
-                        with c3:
-                            metric_card(
-                                "RECORDS WITH ISSUES",
-                                f"{result['issues']:,}",
-                                "Need attention",
-                                "red"
-                            )
-
-                        with c4:
-                            metric_card(
-                                "DUPLICATE EMAILS",
-                                f"{result['duplicates']:,}",
-                                "Repeated email entries",
-                                "orange"
-                            )
-
-                        st.write("")
-                        left, right = st.columns(2)
-
-                        with left:
-                            st.markdown("**Overall data quality**")
-                            st.markdown(
-                                f"""
-                                <div class="metric-card">
-                                    <div class="metric-value green">
-                                        {result['score']}%
-                                    </div>
-                                    <div class="metric-note">
-                                        Records without detected issues
-                                    </div>
-                                </div>
-                                """,
-                                unsafe_allow_html=True
-                            )
-                            st.progress(result["score"] / 100)
-
-                        with right:
-                            st.markdown("**Validation summary**")
-                            st.metric(
-                                "Total issues detected",
-                                len(result["errors"])
-                            )
-                            st.metric(
-                                "Fields with errors",
-                                result["error_df"]["field"].nunique()
-                                if not result["error_df"].empty else 0
-                            )
-
-                        st.divider()
-
-                        st.markdown(
-                            '<div class="section-title">Error Analytics</div>',
-                            unsafe_allow_html=True
-                        )
-
-                        if result["errors"]:
-
-                            chart1, chart2 = st.columns(2)
-
-                            with chart1:
-                                st.markdown("**Issues by field**")
-                                st.bar_chart(
-                                    result["error_df"]["field"].value_counts(),
-                                    color="#20A47D"
-                                )
-
-                            with chart2:
-                                st.markdown("**Issue categories**")
-                                st.bar_chart(
-                                    result["error_df"]["problem"].value_counts(),
-                                    color="#4B91C5"
-                                )
-
-                        else:
-                            st.success(
-                                "No validation issues detected."
-                            )
-
-                        st.divider()
-
-                        st.markdown(
-                            '<div class="section-title">Dataset Explorer</div>',
-                            unsafe_allow_html=True
-                        )
-
-                        tab1, tab2, tab3 = st.tabs([
-                            "Original Data",
-                            "Cleaned Data",
-                            "Error Report"
-                        ])
-
-                        with tab1:
-
-                            st.caption("Original uploaded records.")
-
-                            st.dataframe(
-                                result["original"],
-                                use_container_width=True,
-                                hide_index=True
-                            )
-
-                        with tab2:
-
-                            st.caption("Standardised dataset.")
-
-                            st.dataframe(
-                                result["cleaned"],
-                                use_container_width=True,
-                                hide_index=True
-                            )
-
-                            st.download_button(
-                                "↓ Download Cleaned CSV",
-                                data=make_csv(result["cleaned"]),
-                                file_name="cleaned_data.csv",
-                                mime="text/csv",
-                                use_container_width=True
-                            )
-
-                        with tab3:
-
-                            st.caption(
-                                "Detected problems by row and field."
-                            )
-
-                            if result["errors"]:
-
-                                st.dataframe(
-                                    result["error_df"],
-                                    use_container_width=True,
-                                    hide_index=True
-                                )
-
-                                st.download_button(
-                                    "↓ Download Error Report",
-                                    data=make_error_csv(result["errors"]),
-                                    file_name="error_report.csv",
-                                    mime="text/csv",
-                                    use_container_width=True
-                                )
-
-                            else:
-                                st.success("No errors to report.")
-
-                        st.success(
-                            "Analysis completed. Original data remains unchanged."
-                        )
-
-        except pd.errors.EmptyDataError:
-            st.error("The uploaded CSV is empty or has no header.")
-
-        except pd.errors.ParserError:
-            st.error("The CSV format is invalid.")
-
-        except UnicodeDecodeError:
-            st.error("Please upload a UTF-8 encoded CSV file.")
-
-        except Exception as error:
-            st.error(f"Processing error: {error}")
+    except Exception as error:
+        st.session_state.analysis_cache = None
+        st.error(f"Analysis could not be completed: {error}")
+
+
+result = st.session_state.analysis_cache
+
+
+# Clear stale results when a different upload is selected.
+if result is not None and result["filename"] != uploaded.name:
+    st.session_state.analysis_cache = None
+    result = None
+
+
+if result is None:
+    st.info(
+        "Upload your dataset and select **Run Data Inspection** "
+        "to see the analysis."
+    )
+    st.stop()
+
+
+# ---------------------------------------------------------------------------
+# RESULTS DASHBOARD
+# ---------------------------------------------------------------------------
+
+metrics = result["metrics"]
+errors = result["errors"]
+cleaned_df = result["cleaned"]
+
+issues_df = pd.DataFrame(
+    errors,
+    columns=["row", "field", "problem"],
+)
+
+duplicate_df = issues_df[
+    issues_df["problem"].astype(str).str.contains(
+        "duplicate",
+        case=False,
+        na=False,
+    )
+].copy()
+
+
+section_rule("Workshop report · Quality overview")
+
+
+st.markdown(
+    '<div class="cs-stats">'
+    + show_metric("Total records", f'{metrics["total"]:,}')
+    + show_metric("Valid records", f'{metrics["valid"]:,}', "good")
+    + show_metric("Records with issues", f'{metrics["with_issues"]:,}', "issue")
+    + show_metric("Total issues", f'{metrics["total_issues"]:,}', "issue")
+    + show_metric(
+        "Quality score",
+        f'{metrics["score"]:.1f}%',
+        "good" if metrics["score"] >= 70 else "issue"
+    )
+    + '</div>',
+    unsafe_allow_html=True,
+)
+
+
+# ---------------------------------------------------------------------------
+# CHARTS
+# ---------------------------------------------------------------------------
+
+left, right = st.columns(2)
+
+
+with left:
+    st.markdown("**Record quality**")
+
+    quality_chart = pd.DataFrame(
+        {
+            "Records": [
+                metrics["valid"],
+                metrics["with_issues"],
+            ],
+        },
+        index=["Valid", "With issues"],
+    )
+
+    st.bar_chart(quality_chart)
+
+
+with right:
+    st.markdown("**Issues by field**")
+
+    if issues_df.empty:
+        st.success("No validation issues found.")
 
     else:
+        issue_counts = (
+            issues_df["field"]
+            .replace("", "Unspecified")
+            .value_counts()
+            .rename_axis("Field")
+            .to_frame("Issues")
+        )
 
-        st.markdown("""
-        <div style="
-            background:#121E30;
-            border:1px dashed #426078;
-            border-radius:16px;
-            padding:30px;
-            margin-top:15px;
-            text-align:center;">
-            <div style="font-size:38px;">📂</div>
-            <div style="color:white;font-size:19px;font-weight:700;">
-                Your data workspace is ready
-            </div>
-            <div style="color:#93A6BB;font-size:13px;margin-top:8px;">
-                Upload a CSV dataset to discover data quality issues.
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.bar_chart(issue_counts)
 
-        st.write("")
 
-        f1, f2, f3 = st.columns(3)
+# ---------------------------------------------------------------------------
+# RESULTS TABS
+# ---------------------------------------------------------------------------
 
-        with f1:
-            st.markdown("### 🔍 Validate")
-            st.caption(
-                "Find missing fields, invalid emails, phone numbers and dates."
-            )
+section_rule("Stage 04 · Review and export")
 
-        with f2:
-            st.markdown("### ✨ Clean")
-            st.caption(
-                "Standardise spaces, names, cities and email formatting."
-            )
+tab_original, tab_cleaned, tab_issues, tab_duplicates = st.tabs([
+    "Original dataset",
+    "Cleaned dataset",
+    "Validation issues",
+    "Duplicate records",
+])
 
-        with f3:
-            st.markdown("### 📊 Analyse")
-            st.caption(
-                "Explore quality metrics, errors and downloadable reports."
-            )
 
-        st.info(
-            "Required columns: name, email, phone, date_of_birth, city"
+with tab_original:
+    st.markdown("**Source data**")
+
+    st.dataframe(
+        result["original"],
+        use_container_width=True,
+        hide_index=True,
+    )
+
+
+with tab_cleaned:
+    st.markdown("**Standardised output**")
+
+    st.caption(
+        "Safe formatting changes are applied by your existing validator. "
+        "Invalid records are not silently deleted."
+    )
+
+    st.dataframe(
+        cleaned_df,
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    st.download_button(
+        "DOWNLOAD CLEANED CSV",
+        data=csv_bytes(cleaned_df),
+        file_name="cleaned_data.csv",
+        mime="text/csv",
+        use_container_width=True,
+    )
+
+
+with tab_issues:
+    st.markdown("**Validation error report**")
+
+    if issues_df.empty:
+        st.success("No validation issues were found.")
+
+    else:
+        st.dataframe(
+            issues_df,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    st.download_button(
+        "DOWNLOAD ERROR REPORT",
+        data=csv_bytes(issues_df),
+        file_name="error_report.csv",
+        mime="text/csv",
+        use_container_width=True,
+    )
+
+
+with tab_duplicates:
+    st.markdown("**Duplicate email findings**")
+
+    if duplicate_df.empty:
+        st.success("No duplicate email findings.")
+
+    else:
+        st.dataframe(
+            duplicate_df,
+            use_container_width=True,
+            hide_index=True,
         )
 
 
-# --------------------------------------------------
+# ---------------------------------------------------------------------------
 # FOOTER
-# --------------------------------------------------
+# ---------------------------------------------------------------------------
 
-st.divider()
-
-st.markdown("""
-<div style="
-    text-align:center;
-    color:#71839A;
-    font-size:11px;
-    padding:10px;">
-    <strong style="color:#9AADC2;">CleanSlate</strong>
-    · Data Validation & Cleansing Utility
-    <br>
-    Built with Python and Streamlit
-</div>
-""", unsafe_allow_html=True)
+st.markdown(
+    """
+    <div class="cs-footer">
+      <span><strong>CleanSlate</strong> · Vintage Garage Edition</span>
+      <span>Data validation &amp; cleansing utility</span>
+      <span>Processed in memory · CSV export</span>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
