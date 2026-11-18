@@ -1,0 +1,13 @@
+name,email,phone,date_of_birth,city,department
+  priya sharma,PRIYA@ACME.COM,9876501234,1998-03-14,mumbai,Sales
+Rohan Mehta,rohan.mehta@acme.com,9876501235,1995-12-01,PUNE,IT
+Fatima Khan,fatima.acme.com,9876501236,1997-06-22,delhi,HR
+Dev Patel,dev.patel@acme.com,9876501237,1994-02-30,ahmedabad,Finance
+Ananya Iyer,ananya.iyer@acme.com,,1999-09-09,chennai,Marketing
+Vikram Singh,vikram.singh@acme.com,9876501238,2027-05-10,jaipur,IT
+Priya Sharma,priya@acme.com,9876501234,1998-03-14,MUMBAI,Sales
+Sara Joseph,,9876501239,2000-01-15,kochi,HR
+Karan Das,karan.das@acme.com,1234567890,1996-08-27,kolkata,Operations
+Nisha Rao,nisha.rao@acme.com,8765401234,15/04/1998,BENGALURU,Finance
+Imran Ali,imran.ali@acme.com,8765401235,1993-11-05,hyderabad,IT
+Leah Thomas,leah.thomas@acme.com,8765401236,1992-04-18,goa,Sales

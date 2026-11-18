@@ -31,18 +31,28 @@ def load_data():
     global records, cleaned_records, errors
     global data_loaded, data_processed
 
-    records = []
-    cleaned_records = []
-    errors = []
-    data_loaded = False
-    data_processed = False
+    filename = input(
+        "\nEnter CSV file name or path: "
+    ).strip()
+
+    if not filename:
+        print("\nPlease enter a valid CSV file name.")
+        return
 
     try:
-        records = read_csv("sample_data.csv")
+        new_records = read_csv(filename)
+
+        records = new_records
+        cleaned_records = []
+        errors = []
+
         data_loaded = True
+        data_processed = False
+
         print("\nCSV loaded successfully!")
-        print("File: sample_data.csv")
+        print("File:", filename)
         print("Total records:", len(records))
+
     except (OSError, ValueError) as error:
         print("\nUnable to load CSV:", error)
 
@@ -57,7 +67,9 @@ def validate_data():
     cleaned_records, errors = process_records(records)
     data_processed = True
 
-    rows_with_errors = {item["row"] for item in errors}
+    rows_with_errors = {
+        item["row"] for item in errors
+    }
 
     print("\nVALIDATION COMPLETED")
     print("-" * 35)
@@ -74,7 +86,7 @@ def detect_duplicates():
 
     duplicates = [
         item for item in errors
-        if "Duplicate" in item["problem"]
+        if "duplicate" in item["problem"].lower()
     ]
 
     print("\nDUPLICATE RECORD REPORT")
@@ -117,12 +129,20 @@ def export_data():
         return
 
     try:
-        write_cleaned_csv(cleaned_records, "cleaned_data.csv")
-        write_error_report(errors, "error_report.csv")
+        write_cleaned_csv(
+            cleaned_records,
+            "cleaned_data.csv"
+        )
+
+        write_error_report(
+            errors,
+            "error_report.csv"
+        )
 
         print("\nExport completed successfully!")
         print("Created cleaned_data.csv")
         print("Created error_report.csv")
+
     except OSError as error:
         print("\nExport failed:", error)
 
@@ -130,21 +150,30 @@ def export_data():
 def main():
     while True:
         display_menu()
-        choice = input("Enter your choice (1-6): ").strip()
+
+        choice = input(
+            "Enter your choice (1-6): "
+        ).strip()
 
         if choice == "1":
             load_data()
+
         elif choice == "2":
             validate_data()
+
         elif choice == "3":
             detect_duplicates()
+
         elif choice == "4":
             view_error_report()
+
         elif choice == "5":
             export_data()
+
         elif choice == "6":
             print("\nThank you for using CleanSlate!")
             break
+
         else:
             print("\nInvalid choice. Please select 1-6.")
 
